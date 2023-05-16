@@ -44,9 +44,9 @@ class VGG16Trans(nn.Module):
         self._initialize_weights()
         if not load_weights:
             if batch_norm:
-                mod = torchvision.models.vgg16_bn(pretrained=True)
+                mod = torchvision.models.vgg16_bn(weights=torchvision.models.VGG16_BN_Weights.DEFAULT)
             else:
-                mod = torchvision.models.vgg16(pretrained=True)
+                mod = torchvision.models.vgg16(weights=torchvision.models.VGG16_BN_Weights.DEFAULT)
             self._initialize_weights()
             fsd = collections.OrderedDict()
             for i in range(len(self.encoder.state_dict().items())):
