@@ -3,6 +3,7 @@ import sys
 import time
 import logging
 from math import ceil
+from matplotlib import pyplot as pl
 
 import torch
 from torch import optim
@@ -17,6 +18,8 @@ from utils.helper import Save_Handle, AverageMeter
 import numpy as np
 from tqdm import tqdm
 import wandb
+
+import PIL
 
 
 def train_collate(batch):
@@ -147,7 +150,7 @@ class FSCTrainer(Trainer):
         self.model.eval()
         epoch_res = []
 
-        for inputs, count, ex_list, name in tqdm(self.dataloaders['val']):
+        for inputs, count, ex_list, name, dmap in tqdm(self.dataloaders['val']):
             inputs = inputs.to(self.device)
             # inputs are images with different sizes
             b, c, h, w = inputs.shape
@@ -214,4 +217,65 @@ class FSCTrainer(Trainer):
                        'Val/MSE': mse,
                       }, step=self.epoch)
 
+    def log_test_results(self):
+        self.model.eval()
+
+        test_table = wandb.Table(columns=["name", "img", "gt_dmap", "pred_dmap", "gt_count", "pred_count", "mae", "mse"])
+
+        for inputs, count, ex_list, name, dmap in tqdm(self.dataloaders['val']):
+            inputs = inputs.to(self.device)
+            # inputs are images with different sizes
+            b, c, h, w = inputs.shape
+            h, w = int(h), int(w)
+            assert b == 1, 'the batch size should equal to 1 in validation mode'
+
+            max_size = 2000
+            if h > max_size or w > max_size:
+                h_stride = int(ceil(1.0 * h / max_size))
+                w_stride = int(ceil(1.0 * w / max_size))
+                h_step = h // h_stride
+                w_step = w // w_stride
+                input_list = []
+                for i in range(h_stride):
+                    for j in range(w_stride):
+                        h_start = i * h_step
+                        if i != h_stride - 1:
+                            h_end = (i + 1) * h_step
+                        else:
+                            h_end = h
+                        w_start = j * w_step
+                        if j != w_stride - 1:
+                            w_end = (j + 1) * w_step
+                        else:
+                            w_end = w
+                        input_list.append(
+                            inputs[:, :, h_start:h_end, w_start:w_end])
+                with torch.set_grad_enabled(False):
+                    pre_count = 0.0
+                    for input_ in input_list:
+                        output = self.model(input_)
+                        pre_count += torch.sum(output)
+            else:
+                with torch.set_grad_enabled(False):
+                    output = self.model(inputs)
+                    pre_count = torch.sum(output)
+
+            img_dmap = dmap[0].detach().cpu().numpy().transpose(1, 2, 0)
+            img_dmap = (img_dmap - np.min(img_dmap)) / (np.max(img_dmap) - np.min(img_dmap))
+            img_dmap = (img_dmap * 255).astype(np.uint8)
+            img_output = output[0].detach().cpu().numpy().transpose(1, 2, 0)
+            img_output = (img_output - np.min(img_output)) / (np.max(img_output) - np.min(img_output))
+            img_output = (img_output * 255).astype(np.uint8)
+
+            test_table.add_data(name[0], 
+                                wandb.Image(inputs[0].detach().cpu().numpy().transpose(1, 2, 0)),
+                                wandb.Image(img_dmap),
+                                wandb.Image(img_output),
+                                count[0].item(), 
+                                pre_count.item() / self.args.log_param,
+                                (pre_count.item() / self.args.log_param) - count[0].item(),
+                                np.square((pre_count.item() / self.args.log_param) - count[0].item())
+                                )
+        wandb.log({"Test/results": test_table})
+        
 
