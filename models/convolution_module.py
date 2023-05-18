@@ -9,6 +9,8 @@ class ConvBlock(nn.Module):
     def __init__(self, cin, cout, k_size=3, d_rate=1, batch_norm=True, res_link=False):
         super().__init__()
         self.res_link = res_link
+        if cin == cout:
+            self.res_link = True
         if batch_norm:
             self.body = nn.Sequential(
                 nn.Conv2d(cin, cout, k_size, padding=d_rate, dilation=d_rate),
