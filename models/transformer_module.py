@@ -92,7 +92,7 @@ class Transformer(nn.Module):
     def __init__(self, layers=4, dim=512, norm=None):
         super().__init__()
         d_model = dim
-        nhead = 2
+        nhead = 3
         dim_feedforward = 2048
         dropout = 0.1
         activation = "relu"

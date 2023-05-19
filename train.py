@@ -22,6 +22,7 @@ def parse_args():
     parser.add_argument('--dcsize', type=int, default=4, help='divide count size for density map')
 
     parser.add_argument('--lr', type=float, default=4*1e-5, help='the initial learning rate')
+    parser.add_argument('--alpha', type=float, default=0.5, help='loss weight')
     parser.add_argument('--batch-size', type=int, default=1, help='train batch size')
     parser.add_argument('--num-workers', type=int, default=4, help='the num of training process')
     parser.add_argument('--weight-decay', type=float, default=1e-5, help='the weight decay')

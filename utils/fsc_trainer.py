@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 
 from datasets.fsc_data import FSCData
 from models.convtrans import VGG16Trans
-from losses.losses import DownMSELoss
+from losses.losses import DownMSELoss, InfoNCELoss
 from utils.trainer import Trainer
 from utils.helper import Save_Handle, AverageMeter
 
@@ -60,6 +60,7 @@ class FSCTrainer(Trainer):
         self.optimizer = optim.Adam(self.model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
         self.criterion = DownMSELoss(args.dcsize)
+        self.info_loss = InfoNCELoss(self.device)
 
         self.save_list = Save_Handle(max_num=args.max_model_num)
         self.best_mae = np.inf
@@ -109,10 +110,15 @@ class FSCTrainer(Trainer):
         for inputs, targets, ex_list in tqdm(self.dataloaders['train']):
             inputs = inputs.to(self.device)
             targets = targets.to(self.device) * self.args.log_param
+            for exs in ex_list:
+                for i in range(len(exs)):
+                    exs[i] = exs[i].to(self.device)
 
             with torch.set_grad_enabled(True):
-                et_dmaps = self.model(inputs)
-                loss = self.criterion(et_dmaps, targets)
+                et_dmaps, corr = self.model(inputs, ex_list)
+                loss_1 = self.criterion(et_dmaps, targets)
+                loss_2 = self.info_loss(corr, targets)
+                loss = loss_1 + self.args.alpha*loss_2
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -152,6 +158,9 @@ class FSCTrainer(Trainer):
 
         for inputs, count, ex_list, name, dmap in tqdm(self.dataloaders['val']):
             inputs = inputs.to(self.device)
+            for exs in ex_list:
+                for i in range(len(exs)):
+                    exs[i] = exs[i].to(self.device)
             # inputs are images with different sizes
             b, c, h, w = inputs.shape
             h, w = int(h), int(w)
@@ -180,7 +189,7 @@ class FSCTrainer(Trainer):
                 with torch.set_grad_enabled(False):
                     pre_count = 0.0
                     for input_ in input_list:
-                        output = self.model(input_)
+                        output, corr = self.model(input_, ex_list)
                         pre_count += torch.sum(output) 
             else:
                 with torch.set_grad_enabled(False):
