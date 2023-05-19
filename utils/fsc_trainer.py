@@ -11,9 +11,12 @@ from torch.utils.data import DataLoader
 from datasets.fsc_data import FSCData
 from models.convtrans import VGG16Trans
 from losses.losses import DownMSELoss
+from losses.losses import MincountLoss
+from losses.losses import PerturbationLoss
 from utils.trainer import Trainer
 from utils.helper import Save_Handle, AverageMeter
 
+import copy
 import numpy as np
 from tqdm import tqdm
 import wandb
@@ -53,7 +56,7 @@ class FSCTrainer(Trainer):
         TTA_datasets = FSCData(args.data_dir, method='TTA')
         TTA_dataloaders = DataLoader(TTA_datasets, 1, shuffle=False,
                                                         num_workers=args.num_workers, pin_memory=True)
-        self.dataloaders = {'train': train_dataloaders, 'val': val_dataloaders,'TTA':TTA_dataloaders}
+        self.dataloaders = {'train': train_dataloaders, 'val': val_dataloaders, 'TTA':TTA_dataloaders}
 
         self.model = VGG16Trans(dcsize=args.dcsize)
         self.model.to(self.device)
@@ -94,10 +97,11 @@ class FSCTrainer(Trainer):
         for epoch in range(self.start_epoch, args.max_epoch):
             logging.info('-' * 5 + 'Epoch {}/{}'.format(epoch, args.max_epoch - 1) + '-' * 5)
             self.epoch = epoch
-            self.train_epoch()
-            self.scheduler.step()
+            # self.train_epoch()
+            # self.scheduler.step()
             if epoch >= args.val_start and (epoch % args.val_epoch == 0 or epoch == args.max_epoch - 1):
-                self.val_epoch()
+                # self.val_epoch()
+                self.TTA_epoch()
 
     def train_epoch(self):
         epoch_loss = AverageMeter()
@@ -218,4 +222,66 @@ class FSCTrainer(Trainer):
                        'Val/MSE': mse,
                       }, step=self.epoch)
 
+    def TTA_epoch(self):
+        epoch_start = time.time()
+        self.model.eval()
+        epoch_res = []
 
+        for inputs, count, examplar_list in tqdm(self.dataloaders['TTA']):
+            inputs = inputs.to(self.device)
+            # inputs are images with different sizes
+            b, c, h, w = inputs.shape
+            h, w = int(h), int(w)
+            assert b == 1, 'the batch size should equal to 1 in validation mode'
+
+            with torch.set_grad_enabled(False):
+                features = self.model.extract_feature(inputs)
+            with torch.set_grad_enabled(True):
+                features.requires_grad = True
+                regressor= copy.deepcopy(self.model.tran_decoder_p2)
+                regressor.train()
+                optimizer = torch.optim.Adam(regressor.parameters(), lr=1e-7)
+                for i in range(20):
+                    optimizer.zero_grad()
+                    output = regressor(features)
+                    lcount=1e-9* MincountLoss(output, examplar_list,self.args.dcsize,self.device)
+                    lper=1e-4* PerturbationLoss(output, examplar_list,self.args.dcsize,self.device)
+                    loss =  lper+lcount
+                    if torch.is_tensor(loss):
+                        loss.backward()
+                        optimizer.step()
+
+            with torch.set_grad_enabled(False):
+                output = regressor(features)
+                pre_count = torch.sum(output)
+            
+
+            epoch_res.append(count[0].item() - pre_count.item() / self.args.log_param)
+            # epoch_res.append(count[0].item())
+
+        epoch_res = np.array(epoch_res)
+        mse = np.sqrt(np.mean(np.square(epoch_res)))
+        mae = np.mean(np.abs(epoch_res))
+
+        logging.info('Epoch {} Val, MSE: {:.2f} MAE: {:.2f}, Cost {:.1f} sec'
+                     .format(self.epoch, mse, mae, time.time() - epoch_start))
+
+        model_state_dic = self.model.state_dict()
+        if mae < self.best_mae:
+            self.best_mse = mse
+            self.best_mae = mae
+            self.best_mae_at = self.epoch
+            logging.info("SAVE best mse {:.2f} mae {:.2f} model @epoch {}".format(self.best_mse, self.best_mae, self.epoch))
+            if self.args.save_all:
+                torch.save(model_state_dic, os.path.join(self.save_dir, 'best_model_{}.pth'.format(self.best_count)))
+                self.best_count += 1
+            else:
+                torch.save(model_state_dic, os.path.join(self.save_dir, 'best_model.pth'))
+
+        logging.info("best mae {:.2f} mse {:.2f} @epoch {}".format(self.best_mae, self.best_mse, self.best_mae_at))
+
+        if self.epoch is not None:
+            wandb.log({'Val/bestMAE': self.best_mae,
+                       'Val/MAE': mae,
+                       'Val/MSE': mse,
+                      }, step=self.epoch)

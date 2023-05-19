@@ -44,9 +44,9 @@ class VGG16Trans(nn.Module):
         self._initialize_weights()
         if not load_weights:
             if batch_norm:
-                mod = torchvision.models.vgg16_bn(pretrained=True)
+                mod = torchvision.models.vgg16_bn(weights=torchvision.models.VGG16_BN_Weights.DEFAULT)
             else:
-                mod = torchvision.models.vgg16(pretrained=True)
+                mod = torchvision.models.vgg16(weights=torchvision.models.VGG16_BN_Weights.DEFAULT)
             self._initialize_weights()
             fsd = collections.OrderedDict()
             for i in range(len(self.encoder.state_dict().items())):
@@ -75,4 +75,15 @@ class VGG16Trans(nn.Module):
         x = nn.functional.interpolate(x, scale_factor=self.scale_factor, mode='bicubic', align_corners=True)
         y = self.tran_decoder_p2(x)
 
+        return y
+    
+    def extract_feature(self, x):
+        raw_x = self.encoder(x)
+        bs, c, h, w = raw_x.shape
+
+        # path-transformer
+        x = raw_x.flatten(2).permute(2, 0, 1)
+        x= self.tran_decoder(x, (h, w))
+        x = x.permute(1, 2, 0).view(bs, c, h, w)
+        y = nn.functional.interpolate(x, scale_factor=self.scale_factor, mode='bicubic', align_corners=True)
         return y

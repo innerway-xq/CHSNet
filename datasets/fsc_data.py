@@ -81,10 +81,10 @@ class FSCData(data.Dataset):
         
         if self.method == 'train':
             return self.train_transform(sample)
-        elif self.method == 'val' or 'test':
-            return self.val_transform(sample)
-        else:
+        elif self.method == 'TTA':
             return self.TTA_transform(sample)
+        else:
+            return self.val_transform(sample)
 
     def train_transform(self, sample):
         img, rects, dmap, points, name = sample
@@ -143,7 +143,8 @@ class FSCData(data.Dataset):
         dmap_crop=[]
         for i,(y1,x1,y2,x2) in enumerate(rects):
             dmap_crop.append([dmap[y1:y2,x1:x2],y1,x1,y2,x2])
-
-        return img,dmap_crop
+        img = self.trans_img(img)
+        count = np.sum(dmap)
+        return img,count,dmap_crop
     
 
