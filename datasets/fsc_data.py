@@ -32,10 +32,13 @@ class FSCData(data.Dataset):
         with open(data_split_file) as f:
             self.data_split = json.load(f)
 
-        if method not in ['train', 'val', 'test']:
+        if method not in ['train', 'val', 'test','TTA']:
             raise Exception("not implement")
         self.method = method
-        self.im_ids = self.data_split[method]
+        if method == 'TTA':
+            self.im_ids = self.data_split['val']
+        else:
+            self.im_ids = self.data_split[method]
 
         self.c_size = crop_size
         self.d_ratio = downsample_ratio
@@ -78,8 +81,10 @@ class FSCData(data.Dataset):
         
         if self.method == 'train':
             return self.train_transform(sample)
-        else:
+        elif self.method == 'val' or 'test':
             return self.val_transform(sample)
+        else:
+            return self.TTA_transform(sample)
 
     def train_transform(self, sample):
         img, rects, dmap, points, name = sample
@@ -132,5 +137,13 @@ class FSCData(data.Dataset):
         img = self.trans_img(img)
         count = np.sum(dmap)
         return img, count, [self.trans_img(ex) for ex in examplars], name
+    
+    def TTA_transform(self,sample):
+        img ,rects, dmap, points, name = sample
+        dmap_crop=[]
+        for i,(y1,x1,y2,x2) in enumerate(rects):
+            dmap_crop.append([dmap[y1:y2,x1:x2],y1,x1,y2,x2])
+
+        return img,dmap_crop
     
 

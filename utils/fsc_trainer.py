@@ -49,7 +49,11 @@ class FSCTrainer(Trainer):
         val_datasets = FSCData(args.data_dir, method='test')
         val_dataloaders = DataLoader(val_datasets, 1, shuffle=False,
                                                       num_workers=args.num_workers, pin_memory=True)
-        self.dataloaders = {'train': train_dataloaders, 'val': val_dataloaders}
+        
+        TTA_datasets = FSCData(args.data_dir, method='TTA')
+        TTA_dataloaders = DataLoader(TTA_datasets, 1, shuffle=False,
+                                                        num_workers=args.num_workers, pin_memory=True)
+        self.dataloaders = {'train': train_dataloaders, 'val': val_dataloaders,'TTA':TTA_dataloaders}
 
         self.model = VGG16Trans(dcsize=args.dcsize)
         self.model.to(self.device)
