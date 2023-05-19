@@ -62,7 +62,7 @@ if __name__ == '__main__':
     if args.no_wandb:
         wandb.init(mode="disabled")
     else:
-        wandb.init(project="dip-pj", name=args.tag, config=vars(args), resume="auto")
+        wandb.init(project="dip-pj", name=args.tag, config=vars(args), entity='innerway')
     trainer = FSCTrainer(args)
     trainer.setup()
     trainer.train()
