@@ -1,2 +1,5 @@
+wandb
+*/__pycache__
+checkpoint
+test.ipynb
 datasets/FSC
-__pycache__

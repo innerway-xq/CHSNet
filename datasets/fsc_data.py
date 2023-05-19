@@ -131,6 +131,7 @@ class FSCData(data.Dataset):
 
         img = self.trans_img(img)
         count = np.sum(dmap)
-        return img, count, [self.trans_img(ex) for ex in examplars], name
+        dmap = Image.fromarray(dmap)
+        return img, count, [self.trans_img(ex) for ex in examplars], name, self.trans_dmap(dmap)
     
 
