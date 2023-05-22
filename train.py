@@ -65,5 +65,6 @@ if __name__ == '__main__':
         wandb.init(project="dip-pj", name=args.tag, config=vars(args), entity='innerway')
     trainer = FSCTrainer(args)
     trainer.setup()
-    trainer.train()
+    # trainer.train()
+    trainer.log_test_results()
     wandb.finish()

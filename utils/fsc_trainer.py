@@ -150,7 +150,7 @@ class FSCTrainer(Trainer):
         self.model.eval()
         epoch_res = []
 
-        for inputs, count, ex_list, name, dmap in tqdm(self.dataloaders['val']):
+        for inputs, count, ex_list, name, dmap, rects in tqdm(self.dataloaders['val']):
             inputs = inputs.to(self.device)
             # inputs are images with different sizes
             b, c, h, w = inputs.shape
@@ -187,12 +187,28 @@ class FSCTrainer(Trainer):
                     output = self.model(inputs)
                     pre_count = torch.sum(output)
 
-            epoch_res.append(count[0].item() - pre_count.item() / self.args.log_param)
+            # test-time normalization
+            examplar_sum = []
+            for y1, x1, y2, x2 in rects[0]:
+                d_y1, d_x1, d_y2, d_x2 = y1//self.args.dcsize, x1//self.args.dcsize, y2//self.args.dcsize, x2//self.args.dcsize
+                if d_y1 == d_y2:
+                    continue
+                if d_x1 == d_x2:
+                    continue
+                examplar_sum += [torch.sum(output[0, 0, d_y1:d_y2, d_x1:d_x2])]
+            average_examplar_sum = torch.mean(torch.stack(examplar_sum)).item()
+            if average_examplar_sum == 0:
+                average_examplar_sum = self.args.log_param
+
+            epoch_res.append(count[0].item() - pre_count.item() / average_examplar_sum)
             # epoch_res.append(count[0].item())
 
         epoch_res = np.array(epoch_res)
         mse = np.sqrt(np.mean(np.square(epoch_res)))
         mae = np.mean(np.abs(epoch_res))
+
+        if hasattr(self, 'epoch') is False:
+            self.epoch = 0
 
         logging.info('Epoch {} Val, MSE: {:.2f} MAE: {:.2f}, Cost {:.1f} sec'
                      .format(self.epoch, mse, mae, time.time() - epoch_start))
@@ -222,7 +238,7 @@ class FSCTrainer(Trainer):
 
         test_table = wandb.Table(columns=["name", "img", "gt_dmap", "pred_dmap", "gt_count", "pred_count", "mae", "mse"])
 
-        for inputs, count, ex_list, name, dmap in tqdm(self.dataloaders['val']):
+        for inputs, count, ex_list, name, dmap, rects in tqdm(self.dataloaders['val']):
             inputs = inputs.to(self.device)
             # inputs are images with different sizes
             b, c, h, w = inputs.shape
@@ -260,6 +276,19 @@ class FSCTrainer(Trainer):
                     output = self.model(inputs)
                     pre_count = torch.sum(output)
 
+
+            examplar_sum = []
+            for y1, x1, y2, x2 in rects[0]:
+                d_y1, d_x1, d_y2, d_x2 = y1//self.args.dcsize, x1//self.args.dcsize, y2//self.args.dcsize, x2//self.args.dcsize
+                if d_y1 == d_y2:
+                    continue
+                if d_x1 == d_x2:
+                    continue
+                examplar_sum += [torch.sum(output[0, 0, d_y1:d_y2, d_x1:d_x2])]
+            average_examplar_sum = torch.mean(torch.stack(examplar_sum)).item()
+            if average_examplar_sum == 0:
+                average_examplar_sum = self.args.log_param
+
             img_dmap = dmap[0].detach().cpu().numpy().transpose(1, 2, 0)
             img_dmap = (img_dmap - np.min(img_dmap)) / (np.max(img_dmap) - np.min(img_dmap))
             img_dmap = (img_dmap * 255).astype(np.uint8)
@@ -272,9 +301,9 @@ class FSCTrainer(Trainer):
                                 wandb.Image(img_dmap),
                                 wandb.Image(img_output),
                                 count[0].item(), 
-                                pre_count.item() / self.args.log_param,
-                                (pre_count.item() / self.args.log_param) - count[0].item(),
-                                np.square((pre_count.item() / self.args.log_param) - count[0].item())
+                                pre_count.item() / average_examplar_sum,
+                                (pre_count.item() / average_examplar_sum) - count[0].item(),
+                                np.square((pre_count.item() / average_examplar_sum) - count[0].item())
                                 )
         wandb.log({"Test/results": test_table})
         
