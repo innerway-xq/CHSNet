@@ -60,7 +60,7 @@ class FSCTrainer(Trainer):
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
-        self.criterion = torch.nn.MSELoss()
+        self.criterion = torch.nn.MSELoss(reduction="sum")
 
         self.save_list = Save_Handle(max_num=args.max_model_num)
         self.best_mae = np.inf
