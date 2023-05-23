@@ -88,8 +88,9 @@ class FSCData(data.Dataset):
         # crop examplar
         examplars = []
         rects = rects.astype(np.int)
-        for y1, x1, y2, x2 in rects:
+        for y1, x1, y2, x2 in rects[:3]:
             tmp_ex = img.crop((x1, y1, x2, y2))
+            tmp_ex = tmp_ex.resize((64, 64))
             examplars.append(tmp_ex)
 
         # rescale augmentation
@@ -117,7 +118,7 @@ class FSCData(data.Dataset):
 
         dmap = Image.fromarray(dmap)
 
-        return self.trans_img(img), self.trans_dmap(dmap), [self.trans_img(ex) for ex in examplars]
+        return self.trans_img(img), self.trans_dmap(dmap), torch.stack([self.trans_img(ex) for ex in examplars])
         # return img, dmap, examplars
     
     def val_transform(self, sample):
