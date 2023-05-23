@@ -128,11 +128,12 @@ class FSCData(data.Dataset):
         rects = rects.astype(np.int)
         for y1, x1, y2, x2 in rects:
             tmp_ex = img.crop((x1, y1, x2, y2))
+            tmp_ex = tmp_ex.resize((64, 64))
             examplars.append(tmp_ex)
 
-        img = self.trans_img(img)
+        img = self.trans_img(img.resize((self.c_size, self.c_size)))
         count = np.sum(dmap)
-        dmap = Image.fromarray(dmap)
+        dmap = Image.fromarray(dmap).resize((self.c_size, self.c_size))
         return img, count, [self.trans_img(ex) for ex in examplars], name, self.trans_dmap(dmap)
     
 

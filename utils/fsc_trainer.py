@@ -159,6 +159,8 @@ class FSCTrainer(Trainer):
             h, w = int(h), int(w)
             assert b == 1, 'the batch size should equal to 1 in validation mode'
 
+            ex_list = torch.stack(ex_list).transpose(0, 1).to(self.device)
+
             max_size = 2000
             if h > max_size or w > max_size:
                 h_stride = int(ceil(1.0 * h / max_size))
@@ -186,7 +188,7 @@ class FSCTrainer(Trainer):
                         pre_count += torch.sum(output) 
             else:
                 with torch.set_grad_enabled(False):
-                    output = self.model(inputs)
+                    output = self.model(inputs, ex_list).unsqueeze(1)
                     pre_count = torch.sum(output)
 
             epoch_res.append(count[0].item() - pre_count.item())
