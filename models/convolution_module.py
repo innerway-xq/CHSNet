@@ -27,6 +27,17 @@ class ConvBlock(nn.Module):
         else:
             return self.body(x)
 
+class exp_ConvBlock(nn.Module):
+    def __init__(self, cin, cout, k_size=3, d_rate=1):
+        super().__init__()
+        self.body=nn.Sequential(
+            nn.Conv2d(cin,cout,k_size,d_rate),
+            nn.InstanceNorm2d(64),
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self,x):
+        return self.body(x)
 
 class OutputNet(nn.Module):
     def __init__(self, dim=512):

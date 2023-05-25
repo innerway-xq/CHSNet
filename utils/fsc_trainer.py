@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader
 from datasets.fsc_data import FSCData
 from models.convtrans import VGG16Trans
 from models.transformerall import mae_vit_base_patch16
+from models.cross_convtrans import Cross_VGG16Trans
 from losses.losses import DownMSELoss
 from utils.trainer import Trainer
 from utils.helper import Save_Handle, AverageMeter
@@ -55,12 +56,12 @@ class FSCTrainer(Trainer):
                                                       num_workers=args.num_workers, pin_memory=True)
         self.dataloaders = {'train': train_dataloaders, 'val': val_dataloaders}
 
-        self.model = mae_vit_base_patch16(norm_pix_loss=False)
+        self.model = Cross_VGG16Trans(args.dcsize)
         self.model.to(self.device)
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
-        self.criterion = torch.nn.MSELoss(reduction="sum")
+        self.criterion = DownMSELoss(args.dcsize)
 
         self.save_list = Save_Handle(max_num=args.max_model_num)
         self.best_mae = np.inf
@@ -109,11 +110,11 @@ class FSCTrainer(Trainer):
         # Iterate over data.
         for inputs, targets, ex_list in tqdm(self.dataloaders['train']):
             inputs = inputs.to(self.device)
-            targets = targets.to(self.device)
+            targets = targets.to(self.device) * self.args.log_param
             ex_list = torch.stack(ex_list).to(self.device)
 
             with torch.set_grad_enabled(True):
-                et_dmaps = self.model(inputs, ex_list).unsqueeze(1)
+                et_dmaps = self.model(inputs, ex_list)
                 loss = self.criterion(et_dmaps, targets)
 
                 self.optimizer.zero_grad()
@@ -188,10 +189,10 @@ class FSCTrainer(Trainer):
                         pre_count += torch.sum(output) 
             else:
                 with torch.set_grad_enabled(False):
-                    output = self.model(inputs, ex_list).unsqueeze(1)
+                    output = self.model(inputs, ex_list)
                     pre_count = torch.sum(output)
 
-            epoch_res.append(count[0].item() - pre_count.item())
+            epoch_res.append(count[0].item() - pre_count.item() / self.args.log_param)
             # epoch_res.append(count[0].item())
 
         epoch_res = np.array(epoch_res)
