@@ -37,7 +37,8 @@ class FSCTrainer(Trainer):
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
         else:
-            raise Exception("gpu is not available")
+            self.device = torch.device("cpu")
+            # raise Exception("gpu is not available")
 
         train_datasets = FSCData(args.data_dir,
                                  args.crop_size,
@@ -189,6 +190,7 @@ class FSCTrainer(Trainer):
 
             # test-time normalization
             examplar_sum = []
+            h_over_w = []
             for y1, x1, y2, x2 in rects[0]:
                 d_y1, d_x1, d_y2, d_x2 = y1//self.args.dcsize, x1//self.args.dcsize, y2//self.args.dcsize, x2//self.args.dcsize
                 if d_y1 == d_y2:
@@ -196,9 +198,14 @@ class FSCTrainer(Trainer):
                 if d_x1 == d_x2:
                     continue
                 examplar_sum += [torch.sum(output[0, 0, d_y1:d_y2, d_x1:d_x2])]
+                h_over_w += [(d_x2 - d_x1) / (d_y2 - d_y1)]
             average_examplar_sum = torch.mean(torch.stack(examplar_sum)).item()
-            if average_examplar_sum < 1.8:
+            average_h_over_w = torch.mean(torch.stack(h_over_w)).item()
+            if average_examplar_sum < 165 or abs(average_h_over_w - 1) < 0.3:
                 average_examplar_sum = self.args.log_param
+            
+            # if average_examplar_sum != self.args.log_param:
+            #     print(count[0].item() - pre_count.item() / self.args.log_param, "->", count[0].item() - pre_count.item() / average_examplar_sum, average_examplar_sum, name, (abs(count[0].item() - pre_count.item() / self.args.log_param) - abs(count[0].item() - pre_count.item() / average_examplar_sum))>0)
 
             epoch_res.append(count[0].item() - pre_count.item() / average_examplar_sum)
             # epoch_res.append(count[0].item())
@@ -208,9 +215,9 @@ class FSCTrainer(Trainer):
         mae = np.mean(np.abs(epoch_res))
 
         if hasattr(self, 'epoch') is False:
-            self.epoch = 0
+            self.epoch = None
 
-        logging.info('Epoch {} Val, MSE: {:.2f} MAE: {:.2f}, Cost {:.1f} sec'
+        logging.info('Epoch {} Val, MSE: {:.2f} MAE: {:.4f}, Cost {:.1f} sec'
                      .format(self.epoch, mse, mae, time.time() - epoch_start))
 
         model_state_dic = self.model.state_dict()
@@ -235,7 +242,7 @@ class FSCTrainer(Trainer):
 
     def log_test_results(self):
         self.model.eval()
-
+        epoch_res = []
         test_table = wandb.Table(columns=["name", "img", "gt_dmap", "pred_dmap", "gt_count", "pred_count", "mae", "mse"])
 
         for inputs, count, ex_list, name, dmap, rects in tqdm(self.dataloaders['val']):
@@ -277,7 +284,9 @@ class FSCTrainer(Trainer):
                     pre_count = torch.sum(output)
 
 
+            # test-time normalization
             examplar_sum = []
+            h_over_w = []
             for y1, x1, y2, x2 in rects[0]:
                 d_y1, d_x1, d_y2, d_x2 = y1//self.args.dcsize, x1//self.args.dcsize, y2//self.args.dcsize, x2//self.args.dcsize
                 if d_y1 == d_y2:
@@ -285,9 +294,14 @@ class FSCTrainer(Trainer):
                 if d_x1 == d_x2:
                     continue
                 examplar_sum += [torch.sum(output[0, 0, d_y1:d_y2, d_x1:d_x2])]
+                h_over_w += [(d_x2 - d_x1) / (d_y2 - d_y1)]
             average_examplar_sum = torch.mean(torch.stack(examplar_sum)).item()
-            if average_examplar_sum < 1.8:
+            average_h_over_w = torch.mean(torch.stack(h_over_w)).item()
+            if average_examplar_sum < 165 or abs(average_h_over_w - 1) < 0.3:
                 average_examplar_sum = self.args.log_param
+
+            epoch_res.append(count[0].item() -
+                             pre_count.item() / average_examplar_sum)
 
             img_dmap = dmap[0].detach().cpu().numpy().transpose(1, 2, 0)
             img_dmap = (img_dmap - np.min(img_dmap)) / (np.max(img_dmap) - np.min(img_dmap))
@@ -305,6 +319,11 @@ class FSCTrainer(Trainer):
                                 (pre_count.item() / average_examplar_sum) - count[0].item(),
                                 np.square((pre_count.item() / average_examplar_sum) - count[0].item())
                                 )
+            
+        epoch_res = np.array(epoch_res)
+        mse = np.sqrt(np.mean(np.square(epoch_res)))
+        mae = np.mean(np.abs(epoch_res))
+        print('Test MAE: {:.2f} MSE: {:.2f}'.format(mae, mse))
         wandb.log({"Test/results": test_table})
         
 
