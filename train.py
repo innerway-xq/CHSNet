@@ -66,5 +66,5 @@ if __name__ == '__main__':
     trainer = FSCTrainer(args)
     trainer.setup()
     # trainer.train()
-    trainer.log_test_results()
+    trainer.val_epoch()
     wandb.finish()

@@ -197,7 +197,7 @@ class FSCTrainer(Trainer):
                     continue
                 examplar_sum += [torch.sum(output[0, 0, d_y1:d_y2, d_x1:d_x2])]
             average_examplar_sum = torch.mean(torch.stack(examplar_sum)).item()
-            if average_examplar_sum == 0:
+            if average_examplar_sum < 1.8:
                 average_examplar_sum = self.args.log_param
 
             epoch_res.append(count[0].item() - pre_count.item() / average_examplar_sum)
@@ -286,7 +286,7 @@ class FSCTrainer(Trainer):
                     continue
                 examplar_sum += [torch.sum(output[0, 0, d_y1:d_y2, d_x1:d_x2])]
             average_examplar_sum = torch.mean(torch.stack(examplar_sum)).item()
-            if average_examplar_sum == 0:
+            if average_examplar_sum < 1.8:
                 average_examplar_sum = self.args.log_param
 
             img_dmap = dmap[0].detach().cpu().numpy().transpose(1, 2, 0)
